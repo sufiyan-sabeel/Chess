@@ -1,0 +1,46 @@
+# --- Build outputs ---
+build/
+app/build/
+dist/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# --- Local Android toolchain (downloaded by tools/bootstrap-toolchain.sh) ---
+tools/toolchain/
+
+# --- Signing material: NEVER commit keys or passwords ---
+*.jks
+*.keystore
+*.p12
+*.pem
+*.b64
+keystore.properties
+
+# --- Backend secrets ---
+backend/.env
+backend/.env.local
+backend/vendor/
+backend/var/
+backend/var.log
+
+# --- Databases / local data ---
+*.sqlite3
+*.db
+data/
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+
+# --- Editors / OS ---
+.DS_Store
+.idea/
+*.iml
+.vscode/
+
+# --- Logs ---
+*.log
+!docs/*.md

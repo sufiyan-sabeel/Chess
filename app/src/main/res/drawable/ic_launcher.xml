@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original Checkmate launcher mark: ivory pawn on a charcoal tile with a
+     green board accent. Pure vector so no raster mipmaps are bundled. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- background tile -->
+    <path
+        android:fillColor="#151515"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- board-square accent -->
+    <path
+        android:fillColor="#769656"
+        android:pathData="M0,78h30v30h-30zM78,0h30v30h-30z" />
+    <!-- pawn: head -->
+    <path
+        android:fillColor="#EEEED2"
+        android:pathData="M54,20a11,11 0 1,0 0.01,0z" />
+    <!-- pawn: collar -->
+    <path
+        android:fillColor="#EEEED2"
+        android:pathData="M42,42h24v7h-24z" />
+    <!-- pawn: body -->
+    <path
+        android:fillColor="#EEEED2"
+        android:pathData="M46,33c0,6 -4,8 -4,14h24c0,-6 -4,-8 -4,-14z" />
+    <!-- pawn: base -->
+    <path
+        android:fillColor="#EEEED2"
+        android:pathData="M34,57h40l5,15h-50z" />
+    <!-- base underline accent -->
+    <path
+        android:fillColor="#81B64C"
+        android:pathData="M30,74h48v5h-48z" />
+</vector>

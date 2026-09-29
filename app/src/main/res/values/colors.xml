@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_background">#151515</color>
+    <color name="surface">#222222</color>
+    <color name="accent_green">#81B64C</color>
+</resources>

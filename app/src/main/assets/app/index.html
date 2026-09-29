@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" data-board-theme="classic" data-piece-theme="classic" data-coords="1" data-reduce-motion="0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#151515">
+<meta name="referrer" content="no-referrer">
+<!-- No remote origins: the app is fully bundled (no CDN, no fonts, no analytics). -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self' https://appassets.androidplatform.net;
+               script-src 'self' https://appassets.androidplatform.net;
+               style-src 'self' https://appassets.androidplatform.net 'unsafe-inline';
+               img-src 'self' https://appassets.androidplatform.net data: blob:;
+               font-src 'self' data:;
+               /* API: HTTPS only, plus loopback HTTP for local dev backends */
+               connect-src https: http://127.0.0.1:* http://localhost:* http://10.0.2.2:*;
+               object-src 'none';
+               frame-src 'none';
+               base-uri 'none';
+               form-action 'none'">
+<title>CHECKMATE</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/board.css">
+<link rel="stylesheet" href="css/screens.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 45 45'%3E%3Crect width='45' height='45' rx='9' fill='%23151515'/%3E%3Cpath d='M21.3 8h2.4v2.7h2.7v2.4h-2.7v2.7h-2.4v-2.7h-2.7v-2.4h2.7z' fill='%2381B64C'/%3E%3Cpath d='M13 30.5c0-6 3-8.5 3-12.5h12c0 4 3 6.5 3 12.5z' fill='%2381B64C'/%3E%3Crect x='12' y='31' width='21' height='4' rx='2' fill='%2381B64C'/%3E%3C/svg%3E">
+</head>
+<body>
+  <!-- Application frame -->
+  <div id="app" class="app">
+    <main id="view" class="app__outlet" tabindex="-1"></main>
+    <nav id="tabbar" class="tabbar hidden" aria-label="Primary">
+      <button class="tabbar__tab" data-route="/" type="button"><span class="tabbar__ico" data-icon="home"></span><span>Home</span></button>
+      <button class="tabbar__tab" data-route="/play" type="button"><span class="tabbar__ico" data-icon="board"></span><span>Play</span></button>
+      <button class="tabbar__tab" data-route="/puzzles" type="button"><span class="tabbar__ico" data-icon="puzzle"></span><span>Puzzles</span></button>
+      <button class="tabbar__tab" data-route="/learn" type="button"><span class="tabbar__ico" data-icon="book"></span><span>Learn</span></button>
+      <button class="tabbar__tab" data-route="/more" type="button"><span class="tabbar__ico" data-icon="grid"></span><span>More</span></button>
+    </nav>
+  </div>
+
+  <div id="splash" class="splash" role="status" aria-live="polite">
+    <svg class="splash__logo" viewBox="0 0 45 45" aria-hidden="true">
+      <rect width="45" height="45" rx="10" fill="#1d2a14"/>
+      <path d="M21.3 8h2.4v2.7h2.7v2.4h-2.7v2.7h-2.4v-2.7h-2.7v-2.4h2.7z" fill="#81B64C"/>
+      <path d="M13 30.5c0-6 3-8.5 3-12.5h12c0 4 3 6.5 3 12.5z" fill="#81B64C"/>
+      <rect x="12" y="31" width="21" height="4" rx="2" fill="#81B64C"/>
+    </svg>
+    <div class="splash__name">Checkmate</div>
+    <div class="splash__tag">Chess, offline-first</div>
+    <div class="splash__bar"><i></i></div>
+    <div class="splash__foot" id="splash-foot">Loading…</div>
+  </div>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <div id="modal-root" class="modal-root hidden"></div>
+
+  <noscript>
+    <div class="splash"><div class="splash__name">Checkmate</div>
+    <div class="splash__tag">This app requires JavaScript.</div></div>
+  </noscript>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+-- 0003_games.sql — offline/online game history sync (docs/API.md §4).
+
+CREATE TABLE IF NOT EXISTS games (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    client_match_id VARCHAR(64) NOT NULL,
+    match_id BIGINT UNSIGNED NULL DEFAULT NULL,
+    mode VARCHAR(16) NOT NULL,
+    rated TINYINT(1) NOT NULL DEFAULT 0,
+    result VARCHAR(8) NOT NULL,
+    reason VARCHAR(32) NOT NULL,
+    color VARCHAR(8) NOT NULL,
+    initial_time INT UNSIGNED NOT NULL,
+    increment INT UNSIGNED NOT NULL,
+    pgn MEDIUMTEXT NULL DEFAULT NULL,
+    moves_json LONGTEXT NULL DEFAULT NULL,
+    opponent_name VARCHAR(64) NULL DEFAULT NULL,
+    opponent_user_id BIGINT UNSIGNED NULL DEFAULT NULL,
+    started_at DATETIME NULL DEFAULT NULL,
+    finished_at DATETIME NULL DEFAULT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_games_user_client_match (user_id, client_match_id),
+    KEY idx_games_user_list (user_id, mode, result, id),
+    KEY idx_games_match (match_id),
+    CONSTRAINT fk_games_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_games_match FOREIGN KEY (match_id) REFERENCES matches (id) ON DELETE SET NULL,
+    CONSTRAINT fk_games_opponent FOREIGN KEY (opponent_user_id) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT chk_games_result CHECK (result IN ('win', 'loss', 'draw')),
+    CONSTRAINT chk_games_color CHECK (color IN ('white', 'black')),
+    CONSTRAINT chk_games_mode CHECK (mode IN ('bullet', 'blitz', 'rapid', 'classical'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
