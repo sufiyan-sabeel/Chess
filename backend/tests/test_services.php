@@ -57,7 +57,14 @@ ok(!PasswordService::verify('anything', ''), 'empty stored hash fails safely');
 ok(!PasswordService::verify('x', PasswordService::dummyHash()), 'dummy hash never verifies');
 ok(is_string(PasswordService::algorithmName()) && PasswordService::algorithmName() !== '',
     'hash algorithm selected (argon2id when available, bcrypt fallback here)');
-eq('bcrypt', PasswordService::algorithmName(), 'this Termux PHP build falls back to bcrypt (no libargon2)');
+// Cross-platform contract: argon2id exactly when the runtime defines
+// PASSWORD_ARGON2ID, otherwise the bcrypt family. (Hardcoding either value
+// fails on hosts whose PHP build differs from the dev machine.)
+$expectAlgo = defined('PASSWORD_ARGON2ID') ? 'argon2id' : 'bcrypt';
+eq($expectAlgo, PasswordService::algorithmName(),
+    "algorithm follows PASSWORD_ARGON2ID availability (expected {$expectAlgo})");
+ok(in_array(PasswordService::algorithmName(), ['argon2id', 'bcrypt'], true),
+    'algorithm is one of argon2id/bcrypt — never an unknown scheme');
 
 // ------------------------------------------------------------ tokens
 echo "-- opaque tokens\n";

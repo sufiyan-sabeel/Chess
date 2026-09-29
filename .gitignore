@@ -37,7 +37,9 @@ backend/var.log
 # --- Databases / local data ---
 *.sqlite3
 *.db
-data/
+# root-level scratch data only (unanchored `data/` would swallow app asset
+# directories such as js/data/puzzles.js — the bug CI caught)
+/data/
 
 # --- Node ---
 node_modules/
