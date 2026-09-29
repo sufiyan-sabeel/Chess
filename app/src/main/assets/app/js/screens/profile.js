@@ -54,6 +54,9 @@ export function profileScreen(ctx = {}) {
     let losses = 0;
     let draws = 0;
     for (const g of finished) {
+      // Shared-device games are excluded from the record: there is no single
+      // "you" behind them, so counting them would fabricate a W/L/D.
+      if (g.mode === 'local') continue;
       if (g.result === 'win' || g.result === 'loss' || g.result === 'draw') {
         if (g.result === 'win') wins++;
         else if (g.result === 'loss') losses++;

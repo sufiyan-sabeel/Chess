@@ -33,7 +33,7 @@ final class ErrorHandlingMiddleware
         try {
             return $next($request);
         } catch (ApiException $e) {
-            return JsonResponse::fromException($e);
+            return self::withRateHeaders($request, JsonResponse::fromException($e));
         } catch (\Throwable $e) {
             Log::exception($e, [
                 'request_id' => $request->requestId(),
@@ -50,13 +50,30 @@ final class ErrorHandlingMiddleware
                     'line' => $e->getLine(),
                 ];
             }
-            return JsonResponse::error(
+            return self::withRateHeaders($request, JsonResponse::error(
                 'INTERNAL_ERROR',
                 'An unexpected error occurred.',
                 500,
                 [],
                 $extra,
-            );
+            ));
         }
+    }
+
+    /**
+     * Rate limiting runs INSIDE this middleware, so any response it would have
+     * decorated never reaches it once an exception unwinds the pipeline. It
+     * publishes the X-RateLimit-* values on the request instead; mirror them
+     * here so 4xx/5xx carry the same headers as successful responses.
+     */
+    private static function withRateHeaders(Request $request, Response $response): Response
+    {
+        $headers = $request->attributes['rate_headers'] ?? null;
+        if (is_array($headers)) {
+            foreach ($headers as $name => $value) {
+                $response->withHeader((string) $name, (string) $value);
+            }
+        }
+        return $response;
     }
 }

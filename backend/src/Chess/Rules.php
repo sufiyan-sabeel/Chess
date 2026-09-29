@@ -570,6 +570,7 @@ final class Rules
         // movetext with correct move numbers
         $num = $this->startFull;
         $side = $this->startSide;
+        $afterWhite = false;
         $lines = [];
         $cur = '';
         $push = static function (string $token) use (&$lines, &$cur): void {
@@ -586,8 +587,12 @@ final class Rules
             if ($side === 'w') {
                 $push($num . '. ' . $san);
                 $side = 'b';
+                $afterWhite = true;
             } else {
-                $push($num . '... ' . $san);
+                // black replies share the move number ("1. e4 e5"); a black
+                // move not preceded by a white one gets "1... e5"
+                $push(($afterWhite ? '' : $num . '... ') . $san);
+                $afterWhite = false;
                 $num++;
                 $side = 'w';
             }

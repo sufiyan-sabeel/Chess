@@ -160,7 +160,9 @@ test('SAN: rank disambiguation (N1c2 / N3c2)', function (): void {
 });
 
 test('SAN: full-square disambiguation (Ne4c5)', function (): void {
-    $position = Position::fromFen('7k/8/4N3/N3N3/8/8/8/K7 w - - 0 1');
+    // knights on e4/e6/a4 all reach c5: e4 shares file with e6 and rank with a4,
+    // so neither file nor rank alone disambiguates it -> Ne4c5
+    $position = Position::fromFen('7k/8/4N3/8/N3N3/8/8/K7 w - - 0 1');
     $names = array_map(static fn ($m) => $position->toSan($m), $position->legalMoves());
     expectTrue(in_array('Ne4c5', $names, true), 'Ne4c5 missing: ' . implode(',', $names));
     expectTrue(in_array('N6c5', $names, true), 'N6c5 missing: ' . implode(',', $names));
@@ -189,7 +191,7 @@ test('parse: SAN, decorated SAN, move numbers, UCI, castling variants', function
     $position = Position::initial();
     expectSame('e2e4', $position->parseMove('E2E4')?->uci(), 'uppercase UCI');
 
-    $promoFen = '8/4P3/8/7k/8/8/8/1K6 w - - 0 1';
+    $promoFen = '8/4P3/8/8/7k/8/8/1K6 w - - 0 1';
     expectSame(
         'e7e8q',
         Position::fromFen($promoFen)->parseMove('e7e8q')?->uci(),
@@ -204,13 +206,13 @@ test('parse: SAN, decorated SAN, move numbers, UCI, castling variants', function
 
     // castling forms
     $kiwi = Game::fromFen('r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1');
-    expectSame('e1g2', $kiwi->play('O-O')->historyUci()[0], 'O-O');
-    expectSame('e1c1', $kiwi->play('0-0')->historyUci()[0], '0-0 accepted');
+    expectSame('e1g1', $kiwi->play('O-O')->historyUci()[0], 'O-O');
+    expectSame('e1g1', $kiwi->play('0-0')->historyUci()[0], '0-0 accepted');
     expectSame('e1c1', $kiwi->play('O-O-O')->historyUci()[0], 'O-O-O');
 
     // decorated SAN
     $mateGame = Game::start()->applyMoves(['f3', 'e5', 'g4']);
-    expectSame('Qh4#', $mateGame->play('Qh4+#')->history()[0], 'decorated mate SAN');
+    expectSame('Qh4#', $mateGame->play('Qh4+#')->history()[3], 'decorated mate SAN');
 
     // illegal moves must not parse
     expectSame(null, Position::initial()->parseMove('Ke2'), 'Ke2 blocked by own pawn');
@@ -291,17 +293,17 @@ test('en passant: pinned capturer makes the capture illegal and hides ep from FE
 // --- promotion -------------------------------------------------------------
 
 test('promotion: four legal continuations and SAN/UCI forms', function (): void {
-    $game = Game::fromFen('8/4P3/8/7k/8/8/8/1K6 w - - 0 1');
+    $game = Game::fromFen('8/4P3/8/8/7k/8/8/1K6 w - - 0 1');
     $sans = $game->sanMoves();
     sort($sans);
-    expectSame(['e8=B', 'e8=N', 'e8=Q', 'e8=R'], $sans, 'promotion SANs');
+    expectSame(['Ka1', 'Ka2', 'Kb2', 'Kc1', 'Kc2', 'e8=B', 'e8=N', 'e8=Q', 'e8=R'], $sans, 'promotion SANs');
 
     // promote with check: the knight on e8 attacks the black king on f6
     $checking = Game::fromFen('8/4P3/5k2/8/8/8/8/1K6 w - - 0 1')->play('e8=N');
     expectSame('4N3/8/5k2/8/8/8/8/1K6 b - - 0 1', $checking->fen(), 'knight promoted with check');
     expectTrue($checking->isCheck(), 'black must be in check after e8=N+');
 
-    $uci = Game::fromFen('8/4P3/8/7k/8/8/8/1K6 w - - 0 1')->play('e7e8q');
+    $uci = Game::fromFen('8/4P3/8/8/7k/8/8/1K6 w - - 0 1')->play('e7e8q');
     expectTrue(str_contains($uci->fen(), '4Q3'), 'queen on e8 via UCI: ' . $uci->fen());
 });
 
@@ -351,8 +353,8 @@ test('mate detection: smothered mate position', function (): void {
 
 test('insufficient material: K vs K, K+minor vs K', function (): void {
     expectTrue(Position::fromFen('8/8/8/8/8/8/8/K6k w - - 0 1')->isInsufficientMaterial(), 'K vs K');
-    expectTrue(Position::fromFen('8/8/8/8/8/8/8/K6B w - - 0 1')->isInsufficientMaterial(), 'KB vs K');
-    expectTrue(Position::fromFen('8/8/8/8/8/8/8/K6N w - - 0 1')->isInsufficientMaterial(), 'KN vs K');
+    expectTrue(Position::fromFen('8/8/8/8/8/8/8/K5Bk w - - 0 1')->isInsufficientMaterial(), 'KB vs K');
+    expectTrue(Position::fromFen('8/8/8/8/8/8/8/K5Nk w - - 0 1')->isInsufficientMaterial(), 'KN vs K');
     expectTrue(!Position::fromFen('8/8/8/8/8/4P3/8/1K5k w - - 0 1')->isInsufficientMaterial(), 'KP vs K is not insufficient');
     expectTrue(!Position::fromFen('8/8/8/8/8/8/4r3/K6k w - - 0 1')->isInsufficientMaterial(), 'KR vs K is not insufficient');
 });
@@ -456,7 +458,8 @@ test('GameResult: resign / time-forfeit / abort factories', function (): void {
 test('validateMoveList: returns first illegal move index', function (): void {
     $game = Game::start();
     expectSame(null, $game->validateMoveList(['e4', 'e5', 'Nf3', 'Nc6']), 'legal list');
-    expectSame(3, $game->validateMoveList(['e4', 'e5', 'Qh5', 'Ke7']), 'illegal at index 3');
+    // after 1.e4 e5 2.Qh5 black's queen is blocked by its own d7 pawn
+    expectSame(3, $game->validateMoveList(['e4', 'e5', 'Qh5', 'Qd5']), 'illegal at index 3');
     expectSame(0, $game->validateMoveList(['Ke2']), 'illegal at index 0');
     expectSame(1, $game->validateMoveList(['e4', 'Ke2']), 'illegal at index 1 (own pawn)');
     expectSame(null, $game->validateMoveList(['e2e4', 'e7e5', 'g1f3']), 'UCI list');
@@ -468,11 +471,11 @@ test('validateMoveList: returns first illegal move index', function (): void {
 test('applyMoves: throws IllegalMoveException carrying the index and FEN', function (): void {
     $game = Game::start();
     try {
-        $game->applyMoves(['e4', 'e5', 'Qh5', 'Ke7']);
+        $game->applyMoves(['e4', 'e5', 'Qh5', 'Qd5']);
         throw new RuntimeException('expected IllegalMoveException');
     } catch (IllegalMoveException $e) {
         expectSame(3, $e->index, 'exception index');
-        expectSame('Ke7', $e->move, 'offending move');
+        expectSame('Qd5', $e->move, 'offending move');
         expectTrue(str_contains($e->fenBefore, 'rnbqkbnr/pppp1ppp'), 'fen before: ' . $e->fenBefore);
         expectTrue(str_contains($e->getMessage(), 'index 3'), 'message: ' . $e->getMessage());
     }

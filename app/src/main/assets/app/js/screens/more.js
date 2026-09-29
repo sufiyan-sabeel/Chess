@@ -184,7 +184,12 @@ export function moreScreen(ctx = {}) {
         : g.result === '1-0' ? '1–0'
         : g.result === '0-1' ? '0–1'
         : finished ? '?' : '…';
-      const cls = g.result === '1/2-1/2' || g.result === 'draw' ? 'draw'
+      // Shared-device games get a neutral chip: there is no single "you", so
+      // a win/loss colour would invent a perspective.
+      const cls = g.mode === 'local' ? 'draw'
+        : g.result === '1/2-1/2' || g.result === 'draw' ? 'draw'
+        : g.result === 'win' ? 'win'
+        : g.result === 'loss' ? 'loss'
         : (g.result === '1-0' && g.humanSide === 'w') || (g.result === '0-1' && g.humanSide === 'b') ? 'win'
         : (g.result === '1-0' || g.result === '0-1') ? 'loss'
         : 'draw';

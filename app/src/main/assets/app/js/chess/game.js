@@ -253,7 +253,7 @@ export class GameSession {
     }
 
     const move = this.applyMove({ from, to, promotion }, 'human');
-    if (!move) return { ok: false, reason: 'illegal' });
+    if (!move) return { ok: false, reason: 'illegal' };
     this.pendingPromotion = null;
     return { ok: true, move };
   }
@@ -559,6 +559,10 @@ export class GameSession {
     const tc = this.unlimited ? '' : `${this.control.initialSec}+${this.control.incrementSec}`;
     return buildPgn({
       moves: this.chess.history(),
+      // Replaying must start from THIS game's position — a game created from
+      // a custom FEN would otherwise throw inside buildPgn (chess.js rejects
+      // the first SAN) and take finish()/persist() down with it.
+      fen: this.startFen,
       white: this.names.w,
       black: this.names.b,
       result: outcome ? outcome.token : RESULTS.ongoing,

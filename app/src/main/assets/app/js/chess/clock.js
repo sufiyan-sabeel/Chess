@@ -90,6 +90,7 @@ export class Clock {
 
   creditIncrement(color) {
     if (!color || this.incrementMs <= 0) return;
+    if (this.timedOut) return; // a dead clock is never resurrected by increment
     // consume whatever elapsed since last runningSince, then credit
     this.captureElapsed();
     this.remaining[color] += this.incrementMs;

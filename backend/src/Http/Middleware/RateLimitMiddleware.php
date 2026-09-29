@@ -40,21 +40,29 @@ final class RateLimitMiddleware
 
         $result = $this->hit($bucket, $limit, $window);
 
+        // Published via request attributes so the error funnel (which sits
+        // OUTSIDE this middleware) can attach them to 4xx/5xx responses too.
+        $headers = [
+            'X-RateLimit-Limit' => (string) $limit,
+            'X-RateLimit-Remaining' => (string) (int) $result['remaining'],
+            'X-RateLimit-Reset' => (string) (int) $result['reset'],
+        ];
+        $request->attributes['rate_headers'] = $headers;
+
         if (!$result['allowed']) {
             throw new ApiException(
                 'RATE_LIMITED',
                 'Too many requests. Please try again later.',
                 429,
                 [],
-                ['Retry-After' => (string) max(1, (int) $result['retry_after'])],
+                $headers + ['Retry-After' => (string) max(1, (int) $result['retry_after'])],
             );
         }
 
         $response = $next($request);
-        $response
-            ->withHeader('X-RateLimit-Limit', (string) $limit)
-            ->withHeader('X-RateLimit-Remaining', (string) $result['remaining'])
-            ->withHeader('X-RateLimit-Reset', (string) $result['reset']);
+        foreach ($headers as $name => $value) {
+            $response->withHeader($name, $value);
+        }
         return $response;
     }
 

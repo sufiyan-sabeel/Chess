@@ -119,7 +119,7 @@ final class Kernel
         $router->add('POST', '/auth/register', [AuthController::class, 'register'], ['rate' => 'register']);
         $router->add('POST', '/auth/login', [AuthController::class, 'login'], ['rate' => 'login']);
         $router->add('POST', '/auth/refresh', [AuthController::class, 'refresh'], ['rate' => 'default']);
-        $router->add('POST', '/auth/logout', [AuthController::class, 'logout'], ['rate' => 'default', 'auth' => true]);
+        $router->add('POST', '/auth/logout', [AuthController::class, 'logout'], ['rate' => 'default', 'auth' => 'lenient']);
         $router->add('GET', '/auth/me', [AuthController::class, 'me'], ['rate' => 'default', 'auth' => true]);
         $router->add('POST', '/auth/verify-email', [AuthController::class, 'verifyEmail'], ['rate' => 'verify']);
         $router->add('POST', '/auth/resend-verification', [AuthController::class, 'resendVerification'], ['rate' => 'resend', 'auth' => 'optional']);

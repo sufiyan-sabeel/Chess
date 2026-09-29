@@ -10,6 +10,12 @@ use Checkmate\Support\Log;
 /**
  * Fixed-window, DB-backed rate limiter (per IP + route, docs/API.md "Rate limits").
  * Table `rate_limits` — survives process restarts, no extra infrastructure.
+ *
+ * The window is FLOATING: it opens on the first request of a bucket and lasts
+ * `windowSeconds` from that moment. A clock-aligned window would restart in the
+ * middle of a burst whenever the burst straddles a minute boundary, silently
+ * doubling the effective allowance ("10/min" would become "10 + 10").
+ *
  * Fails OPEN when the DB is unreachable: an outage must not lock users out.
  */
 final class RateLimiter
@@ -20,8 +26,6 @@ final class RateLimiter
     public function hit(string $bucket, int $limit, int $windowSeconds): array
     {
         $now = time();
-        $windowStart = $now - ($now % $windowSeconds);
-        $reset = $windowStart + $windowSeconds;
 
         try {
             $pdo = Connection::pdo();
@@ -37,20 +41,24 @@ final class RateLimiter
                 $ins = $pdo->prepare(
                     'INSERT INTO rate_limits (bucket, window_start, hits) VALUES (?, ?, 1)'
                 );
-                $ins->execute([$bucket, $windowStart]);
+                $ins->execute([$bucket, $now]);
                 $hits = 1;
-            } elseif ((int) $row['window_start'] < $windowStart) {
+                $reset = $now + $windowSeconds;
+            } elseif ($now - (int) $row['window_start'] >= $windowSeconds) {
+                // Previous window has fully elapsed — open a fresh one.
                 $upd = $pdo->prepare(
                     'UPDATE rate_limits SET window_start = ?, hits = 1 WHERE bucket = ?'
                 );
-                $upd->execute([$windowStart, $bucket]);
+                $upd->execute([$now, $bucket]);
                 $hits = 1;
+                $reset = $now + $windowSeconds;
             } else {
                 $hits = (int) $row['hits'] + 1;
                 $upd = $pdo->prepare(
                     'UPDATE rate_limits SET hits = ? WHERE bucket = ?'
                 );
                 $upd->execute([$hits, $bucket]);
+                $reset = (int) $row['window_start'] + $windowSeconds;
             }
 
             $pdo->commit();
@@ -62,7 +70,13 @@ final class RateLimiter
                 }
             }
             Log::event('ratelimit.error', ['route' => explode('|', $bucket)[0]]);
-            return ['allowed' => true, 'limit' => $limit, 'remaining' => $limit, 'retry_after' => 0, 'reset' => $reset];
+            return [
+                'allowed' => true,
+                'limit' => $limit,
+                'remaining' => $limit,
+                'retry_after' => 0,
+                'reset' => $now + $windowSeconds,
+            ];
         }
 
         $allowed = $hits <= $limit;

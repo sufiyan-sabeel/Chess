@@ -54,7 +54,10 @@ if ! curl -fsS "${TEST_BASE_URL}/api/v1/health" >/dev/null 2>&1; then
 fi
 
 set +e
-TEST_BASE_URL="$TEST_BASE_URL" TEST_API_PORT="$API_PORT" php "${BACKEND_DIR}/tests/run.php"
+# tests/api.php = docs/API.md §1+§2 suite (this stack's gate).
+# tests/run.php  belongs to the concurrent agent's parallel harness — it is a
+# separate entry point (php backend/tests/run.php) and is NOT gated here.
+TEST_BASE_URL="$TEST_BASE_URL" TEST_API_PORT="$API_PORT" php "${BACKEND_DIR}/tests/api.php"
 STATUS=$?
 set -e
 

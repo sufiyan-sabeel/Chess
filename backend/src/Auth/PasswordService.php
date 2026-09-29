@@ -17,17 +17,28 @@ final class PasswordService
 {
     private static ?string $dummyHash = null;
 
-    /** @return int one of the PASSWORD_* algorithm ids */
-    public static function algorithm(): int
+    /**
+     * Password hashing algorithm identifier.
+     *
+     * PHP 8.4+ uses string identifiers (`PASSWORD_DEFAULT === '2y'`, and
+     * `'argon2id'` where libargon2 is compiled in); older builds used ints.
+     * Both are accepted by password_hash()/password_needs_rehash(), so this
+     * returns whatever the constant holds as a string.
+     */
+    public static function algorithm(): string
     {
         return defined('PASSWORD_ARGON2ID')
-            ? (int) constant('PASSWORD_ARGON2ID')
-            : PASSWORD_DEFAULT;
+            ? (string) constant('PASSWORD_ARGON2ID')
+            : (string) PASSWORD_DEFAULT;
     }
 
     public static function algorithmName(): string
     {
-        return defined('PASSWORD_ARGON2ID') ? 'argon2id' : 'bcrypt';
+        if (defined('PASSWORD_ARGON2ID')) {
+            return 'argon2id';
+        }
+        // PASSWORD_DEFAULT is '2y'/'2x'/'2b' — the bcrypt family.
+        return str_starts_with(self::algorithm(), '2') ? 'bcrypt' : (string) self::algorithm();
     }
 
     public static function hash(string $password): string

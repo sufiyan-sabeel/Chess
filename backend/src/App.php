@@ -47,6 +47,10 @@ final class App
 
     public function handle(Request $request): Response
     {
+        // Assigned before routing: pre-pipeline failures (404, 413) must still
+        // be traceable via X-Request-Id (docs/API.md §2 / error envelope).
+        RequestIdMiddleware::assign($request);
+
         try {
             $response = $this->dispatch($request);
         } catch (ApiException $e) {

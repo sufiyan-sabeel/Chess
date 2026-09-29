@@ -34,13 +34,14 @@ const MODE_LABELS = { local: 'Local (2 players)', bot: 'Computer', online: 'Onli
  */
 function classify(record) {
   if (!record || !record.result || record.result === '*') return null;
+  // Two humans on one device: there is no single "you" to attribute it to,
+  // so shared-device results never enter the win/loss/draw counters.
+  if (record.mode === 'local') return null;
   // Some writers store the verdict directly.
   if (record.result === 'win' || record.result === 'loss' || record.result === 'draw') return record.result;
   if (record.result === '1/2-1/2') return 'draw';
   const winner = record.winner || (record.result === '1-0' ? 'w' : record.result === '0-1' ? 'b' : null);
   if (!winner) return null;
-  // Two humans on one device: there is no single "you" to attribute it to.
-  if (record.mode === 'local') return null;
   if (!record.humanSide) return null;
   return winner === record.humanSide ? 'win' : 'loss';
 }
@@ -65,11 +66,17 @@ function computeLocal(games) {
   let losses = 0;
   let draws = 0;
   let unattributed = 0;
-  for (const { verdict } of rows) {
+  let unattributedShared = 0;   // two-player games on this device
+  let unattributedUnknownSide = 0; // finished, but no known human side/result
+  for (const { g, verdict } of rows) {
     if (verdict === 'win') wins++;
     else if (verdict === 'loss') losses++;
     else if (verdict === 'draw') draws++;
-    else unattributed++;
+    else {
+      unattributed++;
+      if (g.mode === 'local') unattributedShared++;
+      else unattributedUnknownSide++;
+    }
   }
 
   // Current streak: consecutive identical verdicts from the newest game back.
@@ -98,7 +105,7 @@ function computeLocal(games) {
   const decided = wins + losses + draws;
   return {
     total: finished.length,
-    wins, losses, draws, unattributed,
+    wins, losses, draws, unattributed, unattributedShared, unattributedUnknownSide,
     winPct: decided ? Math.round((wins / decided) * 100) : null,
     streak,
     modeRows,
@@ -171,7 +178,6 @@ export function statsScreen(ctx = {}) {
   root.appendChild(scroll);
 
   // ------------------------------------------------------------- period
-  const periodFilter = el('div', { class: 'period-filter mt-2' });
   const periodChips = PERIODS.map((p) => el('button', {
     class: 'chip',
     type: 'button',
@@ -187,8 +193,9 @@ export function statsScreen(ctx = {}) {
       loadServer();
     },
   }));
-  periodFilter.appendChild(el('span', { class: 'tiny muted', text: 'Period' }));
-  periodFilter.appendChild(...periodChips);
+  const periodFilter = el('div', { class: 'period-filter mt-2' },
+    el('span', { class: 'tiny muted', text: 'Period' }),
+    periodChips);
 
   const localHolder = el('div', {});
   const serverHolder = el('div', {});
@@ -303,11 +310,16 @@ export function statsScreen(ctx = {}) {
     ));
 
     if (stats.unattributed) {
+      const reasons = [];
+      if (stats.unattributedShared) {
+        reasons.push(`${stats.unattributedShared} shared-device game${stats.unattributedShared === 1 ? '' : 's'} (two players on one device, so there is no single "you")`);
+      }
+      if (stats.unattributedUnknownSide) {
+        reasons.push(`${stats.unattributedUnknownSide} record${stats.unattributedUnknownSide === 1 ? '' : 's'} with no named human side or result`);
+      }
       localHolder.appendChild(el('div', { class: 'notice mt-2' },
         icon('info', 16),
-        el('div', {}, `${stats.unattributed} finished game${stats.unattributed === 1 ? '' : 's'} ${
-          stats.unattributed === 1 ? 'is' : 'are'} not counted in wins/losses: ${
-          stats.modeRows.find((m) => m.mode === 'local') ? 'shared-device games have no single winner "you", ' : ''}and older records may not name the side you played.`),
+        el('div', {}, `${stats.unattributed} finished game${stats.unattributed === 1 ? ' is' : 's are'} not counted in wins/losses: ${reasons.join('; ')}.`),
       ));
     }
   }

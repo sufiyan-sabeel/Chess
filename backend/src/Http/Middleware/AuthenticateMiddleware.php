@@ -17,6 +17,10 @@ use Checkmate\Http\Response;
  *   'auth' => true      require a valid, unexpired access token
  *   'auth' => 'optional' authenticate when Authorization is present, otherwise
  *                       proceed anonymously (and reject a present-but-bad token)
+ *   'auth' => 'lenient' authenticate when the token still resolves; a missing,
+ *                       revoked or expired token proceeds anonymously — used by
+ *                       POST /auth/logout, which docs/API.md §1 defines as
+ *                       idempotent ("already-revoked tokens return success")
  *
  * The authenticated user row is placed in $request->attributes['user'].
  */
@@ -27,6 +31,15 @@ final class AuthenticateMiddleware
         /** @var array{meta:array<string,mixed>}|null $route */
         $route = $request->attributes['route'] ?? null;
         $mode = is_array($route) ? ($route['meta']['auth'] ?? false) : false;
+
+        if ($mode === 'lenient') {
+            $token = $request->bearerToken();
+            $user = $token === null ? null : $this->resolveOrNull($token);
+            if ($user !== null) {
+                $this->attach($request, $user);
+            }
+            return $next($request);
+        }
 
         if ($mode !== false) {
             $token = $request->bearerToken();
@@ -41,15 +54,30 @@ final class AuthenticateMiddleware
                     throw new ApiException('UNAUTHORIZED', 'Authentication required.', 401);
                 }
                 if ($user !== null) {
-                    $request->attributes['user'] = $user;
-                    // `user_id` for controllers from the concurrently-shipped
-                    // stack (AccountController reads attributes['user_id']).
-                    $request->attributes['user_id'] = (int) $user['id'];
+                    $this->attach($request, $user);
                 }
             }
         }
 
         return $next($request);
+    }
+
+    private function attach(Request $request, array $user): void
+    {
+        $request->attributes['user'] = $user;
+        // `user_id` for controllers from the concurrently-shipped stack
+        // (AccountController reads attributes['user_id']).
+        $request->attributes['user_id'] = (int) $user['id'];
+    }
+
+    /** Like resolveUser(), but any failure (unknown/expired/revoked) yields null. */
+    private function resolveOrNull(string $token): ?array
+    {
+        try {
+            return $this->resolveUser($token);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** @return array<string,mixed>|null null when the token is unknown/revoked (expired throws) */

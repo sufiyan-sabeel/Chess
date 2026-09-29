@@ -1,0 +1,284 @@
+# =============================================================================
+# Checkmate — Android CI/CD
+# -----------------------------------------------------------------------------
+# BUILD SYSTEM (detected by inspection, not assumed):
+#   This repository has NO Gradle wrapper and no Gradle configuration. The
+#   Android APK is produced by the project's own no-Gradle pipeline:
+#     tools/bootstrap-toolchain.sh   (kotlin-compiler, R8/D8, android.jar)
+#     tools/build-apk.sh [debug|release]  (aapt2 -> kotlinc -> D8/R8 ->
+#                                           zipalign -> apksigner)
+#     tools/verify-apk.sh <apk>      (16 required checks; the source of truth
+#                                      for every APK claim in docs/BUILD_STATUS)
+#   If a Gradle wrapper is ever added, update `detect-build-system` below.
+#
+# TRIGGERS: pushes to main, semantic version tags (v1.0.0), manual dispatch.
+# PERMISSIONS: read-only by default; only the release job gets contents:write.
+# SIGNING: release credentials come exclusively from GitHub Actions secrets
+#   (CHECKMATE_KEYSTORE_B64 + CHECKMATE_KEYSTORE_PASSWORD +
+#    CHECKMATE_KEY_ALIAS + CHECKMATE_KEY_PASSWORD). When they are absent the
+#   build falls back to an auto-generated, clearly-labelled dev keystore and
+#   the release notes say so. No key material is ever committed.
+# =============================================================================
+
+name: Android Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name to build (X.Y.Z)'
+        required: false
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  # ------------------------------------------------------------------ tests
+  frontend-tests:
+    name: Frontend tests (Node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify bundled puzzles against chess.js
+        run: node tests/frontend/verify-puzzles.mjs
+
+      - name: Unit tests (clock, PGN, bot, game session, puzzle schema)
+        run: node --test tests/frontend/*.test.mjs
+
+  backend-tests:
+    name: Backend tests (PHP + MariaDB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+          coverage: none
+
+      # backend/bin/lib.sh drives a PRIVATE MariaDB (mariadb-install-db /
+      # mariadbd on 127.0.0.1:3307). The runner image ships MySQL (no
+      # mariadbd) — install MariaDB; remove MySQL first if apt refuses.
+      - name: Install MariaDB server binaries
+        run: |
+          sudo systemctl stop mysql 2>/dev/null || true
+          sudo apt-get update -q
+          if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q mariadb-server; then
+            echo "mariadb install conflicted with preinstalled MySQL — removing MySQL"
+            sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y -q \
+              mysql-server-8.0 mysql-client-8.0 mysql-server-core-8.0 mysql-client-core-8.0 || true
+            sudo apt-get install -y -q mariadb-server
+          fi
+          mariadbd --version
+
+      # Both suites run in ONE root context: bin/test.sh generates .env with
+      # mode 600 and owns the private datadir, and tests/run.php reuses the
+      # same server/socket. Root also satisfies mariadbd --user=root.
+      - name: Run backend test suites
+        run: |
+          sudo -E env "PATH=$PATH" bash -c '
+            set -e
+            backend/bin/test.sh
+            echo "--- suite 2: tests/run.php (migrations + services + http) ---"
+            php backend/tests/run.php
+            echo "--- suite 3: chess rules engine + perft + chess.js cross-check ---"
+            php backend/tests/chess-suite.php
+          '
+
+  # ------------------------------------------------------------------- build
+  build:
+    name: Build signed APK
+    needs: [frontend-tests, backend-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect build system
+        id: detect
+        run: |
+          if [ -f ./gradlew ] && [ -f ./settings.gradle ] || [ -f ./settings.gradle.kts ]; then
+            echo "build-system=gradle" >> "$GITHUB_OUTPUT"
+            echo "::error::Gradle wrapper found but this workflow builds via tools/build-apk.sh — update detect-build-system."
+            exit 1
+          fi
+          if [ ! -x ./tools/build-apk.sh ] || [ ! -x ./tools/bootstrap-toolchain.sh ]; then
+            echo "::error::No build entrypoint found (tools/build-apk.sh missing)."
+            exit 1
+          fi
+          echo "build-system=no-gradle-pipeline (tools/build-apk.sh)" >> "$GITHUB_OUTPUT"
+          echo "Detected build system: no-Gradle pipeline (tools/build-apk.sh)"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Locate Android build-tools (aapt2, apksigner)
+        run: |
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          test -x "$BT/aapt2"   || { echo "::error::aapt2 not found in $BT"; ls -la "$ANDROID_HOME/build-tools"; exit 1; }
+          test -f "$BT/apksigner" || { echo "::error::apksigner not found in $BT"; exit 1; }
+          echo "$BT" >> "$GITHUB_PATH"
+          "$BT/aapt2" version
+          "$BT/apksigner" --version || true
+
+      - name: Cache Kotlin/R8 toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('tools/bootstrap-toolchain.sh') }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"
+            V="${V:-1.0.0}"
+          fi
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$V' is not X.Y.Z"
+            exit 1
+          fi
+          IFS=. read -r MA MI PA <<< "$V"
+          VC=$(( MA * 10000 + MI * 100 + PA ))
+          echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VC" >> "$GITHUB_ENV"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building versionName=$V versionCode=$VC"
+
+      - name: Configure release signing (secrets only, never in the repo)
+        env:
+          CHECKMATE_KEYSTORE_B64: ${{ secrets.CHECKMATE_KEYSTORE_B64 }}
+          CHECKMATE_KEYSTORE_PASSWORD: ${{ secrets.CHECKMATE_KEYSTORE_PASSWORD }}
+          CHECKMATE_KEY_ALIAS: ${{ secrets.CHECKMATE_KEY_ALIAS }}
+          CHECKMATE_KEY_PASSWORD: ${{ secrets.CHECKMATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$CHECKMATE_KEYSTORE_B64" ]; then
+            KS="$RUNNER_TEMP/release-keystore.jks"
+            printf '%s' "$CHECKMATE_KEYSTORE_B64" | base64 -d > "$KS"
+            {
+              echo "CHECKMATE_KEYSTORE=$KS"
+              echo "CHECKMATE_KEYSTORE_PASSWORD=$CHECKMATE_KEYSTORE_PASSWORD"
+              echo "CHECKMATE_KEY_ALIAS=${CHECKMATE_KEY_ALIAS:-checkmate}"
+              echo "CHECKMATE_KEY_PASSWORD=$CHECKMATE_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "signing=external-keystore (GitHub Actions secrets)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "signing=dev-keystore (auto-generated; production secrets NOT configured)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Release signing secrets are not configured — the APK will be signed with an auto-generated dev keystore (installable, but not a production identity)."
+          fi
+
+      - name: Bootstrap toolchain (kotlin-compiler, R8, android.jar)
+        run: tools/bootstrap-toolchain.sh
+
+      - name: Build release APK
+        run: tools/build-apk.sh release
+
+      - name: Verify release APK (16 checks)
+        run: |
+          APK="dist/checkmate-${VERSION_NAME}-release.apk"
+          test -s "$APK"
+          ./tools/verify-apk.sh "$APK"
+
+      - name: Build debug APK (test build without release shrinking)
+        run: tools/build-apk.sh debug
+
+      - name: Report size and SHA-256
+        run: |
+          (cd dist && sha256sum ./*.apk > SHA256SUMS.txt)
+          echo "## Checkmate ${VERSION_NAME} (versionCode ${VERSION_CODE})" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/BUILD_INFO.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -la dist/*.apk
+
+      - name: Upload APK + checksum artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkmate-apk
+          path: |
+            dist/*.apk
+            dist/*.sha256
+            dist/SHA256SUMS.txt
+            dist/BUILD_INFO.txt
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkmate-build-logs
+          path: |
+            build/*.log
+            build/*.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ----------------------------------------------------------------- release
+  release:
+    name: GitHub Release (version tags)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: checkmate-apk
+          path: checkmate-apk
+
+      - name: Compose release notes
+        run: |
+          {
+            echo "Checkmate ${GITHUB_REF_NAME} — Android APK (sideload install)."
+            echo
+            echo '### Artifacts'
+            echo '```'
+            cat checkmate-apk/BUILD_INFO.txt
+            echo
+            cat checkmate-apk/SHA256SUMS.txt
+            echo '```'
+            echo
+            if grep -q 'signing: dev-keystore' checkmate-apk/BUILD_INFO.txt; then
+              echo "> **Signing:** auto-generated **dev keystore** — release signing secrets were not configured for this run. Installable for testing; not a production identity."
+            else
+              echo "> **Signing:** release keystore from GitHub Actions secrets."
+            fi
+            echo
+            echo "Built by workflow run ${GITHUB_RUN_ID} on \`main\` (commit ${GITHUB_SHA})."
+          } > notes.md
+          cat notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: |
+            checkmate-apk/*.apk
+            checkmate-apk/*.sha256
+            checkmate-apk/SHA256SUMS.txt
+            checkmate-apk/BUILD_INFO.txt
+          fail_on_unmatched_files: true

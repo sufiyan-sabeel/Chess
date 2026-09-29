@@ -2,11 +2,16 @@
 build/
 app/build/
 dist/
+.gradle/
+.kotlin/
+local.properties
+captures/
 *.apk
 *.aab
 *.ap_
 *.dex
 *.class
+*.hprof
 
 # --- Local Android toolchain (downloaded by tools/bootstrap-toolchain.sh) ---
 tools/toolchain/
@@ -20,11 +25,14 @@ tools/toolchain/
 keystore.properties
 
 # --- Backend secrets ---
+.env
+.env.local
 backend/.env
 backend/.env.local
 backend/vendor/
 backend/var/
 backend/var.log
+.phpunit.cache
 
 # --- Databases / local data ---
 *.sqlite3

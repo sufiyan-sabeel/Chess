@@ -127,6 +127,47 @@ function drop_db(string $name): void
 }
 
 /**
+ * proc_open() that survives empty environment values.
+ *
+ * This PHP build (8.5.1) drops every environment entry whose value is `''`
+ * when it builds the child environment: `proc_open($c, ..., ['FOO' => ''])`
+ * never sets FOO in the child. The test env relies on genuinely empty values
+ * (`DB_PASSWORD=` / `DB_HOST=` force the passwordless root socket), and a
+ * silently dropped one makes the child fall back to backend/.env — i.e. the
+ * app DB user and password instead of root@socket.
+ *
+ * Workaround: non-empty values go through proc_open()'s env array; empty ones
+ * are re-applied as argv assignments to the `env` utility (`env FOO= cmd`),
+ * which does accept empty assignments.
+ *
+ * @param list<string> $cmd
+ * @param array<string,string> $env
+ * @param array<int,array|int|resource> $descriptorSpec
+ * @param array<int,resource> $pipes
+ * @return resource
+ */
+function spawn(array $cmd, array $env, array $descriptorSpec, array &$pipes, ?string $cwd = null)
+{
+    $keep = [];
+    $empty = [];
+    foreach ($env as $key => $value) {
+        if ($value === '') {
+            $empty[] = $key . '=';
+        } else {
+            $keep[$key] = $value;
+        }
+    }
+    if ($empty !== []) {
+        $cmd = array_merge(['/usr/bin/env'], $empty, $cmd);
+    }
+    $proc = proc_open($cmd, $descriptorSpec, $pipes, $cwd, $keep);
+    if (!is_resource($proc)) {
+        throw new RuntimeException('failed to start: ' . implode(' ', $cmd));
+    }
+    return $proc;
+}
+
+/**
  * Run bin/migrate.php against a database.
  *
  * @param array<string,string> $overrides
@@ -141,10 +182,8 @@ function run_migrate(string $args, string $dbName, array $overrides = []): array
             $cmd[] = $arg;
         }
     }
-    $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, test_env(['DB_NAME' => $dbName] + $overrides));
-    if (!is_resource($proc)) {
-        throw new RuntimeException('failed to start migrate.php');
-    }
+    $pipes = [];
+    $proc = spawn($cmd, test_env(['DB_NAME' => $dbName] + $overrides), [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
@@ -216,11 +255,9 @@ function http(string $method, string $path, array $opts = []): array
     $ms = (hrtime(true) - $start) / 1e6;
     if ($raw === false) {
         $error = curl_error($ch);
-        curl_close($ch);
         throw new RuntimeException("HTTP {$method} {$path} failed: {$error}");
     }
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
 
     $headerBlockEnd = strpos($raw, "\r\n\r\n");
     $headerBlock = $headerBlockEnd === false ? '' : substr($raw, 0, $headerBlockEnd);
@@ -291,10 +328,8 @@ function server_start(int $port, array $envOverrides = []): array
     if ($log === false) {
         throw new RuntimeException('cannot open server log');
     }
-    $proc = proc_open($cmd, [1 => $log, 2 => $log], $pipes, backend_dir(), test_env($envOverrides));
-    if (!is_resource($proc)) {
-        throw new RuntimeException('failed to start php -S');
-    }
+    $pipes = [];
+    $proc = spawn($cmd, test_env($envOverrides), [1 => $log, 2 => $log], $pipes, backend_dir());
     fclose($log);
     return ['proc' => $proc, 'pid' => 0, 'log' => $logPath];
 }
