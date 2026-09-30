@@ -61,7 +61,8 @@ export function customControl({ minutes, incrementSec = 0, unlimited = false }) 
   };
 }
 
-const OUTCOME_REASONS = {
+/** Human-readable outcome labels (records store the raw `reason` key). */
+export const OUTCOME_REASONS = {
   checkmate: 'Checkmate',
   stalemate: 'Stalemate',
   insufficient: 'Insufficient material',

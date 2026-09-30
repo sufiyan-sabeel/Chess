@@ -8,7 +8,7 @@
  *
  * Licensing: designed for Checkmate, no third-party piece artwork bundled.
  */
-import { svgEl } from './ui/dom.js';
+import { svgEl } from '../ui/dom.js';
 
 const BASE =
   'M13.2,37.6 h18.6 a1.6,1.6 0 0 0 1.6,-1.6 v-0.9 a2.1,2.1 0 0 0 -2.1,-2.1 ' +

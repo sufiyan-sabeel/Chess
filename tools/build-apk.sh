@@ -100,8 +100,11 @@ else
 fi
 
 log "dex: $(wc -c <"$BUILD/dex/classes.dex") bytes"
-python3 "$ROOT/tools/dex_classes.py" "$BUILD/dex/classes.dex" \
-  | grep -q 'com.umaiz.checkmate.MainActivity' || die "MainActivity missing from dex"
+# No pipe here on purpose: `| grep -q` closes stdin at the first match, which
+# kills dex_classes.py with EPIPE and `set -o pipefail` then reports failure
+# even when the class IS present (CI run 36601986085). Use --contains instead.
+python3 "$ROOT/tools/dex_classes.py" --contains 'com.umaiz.checkmate.MainActivity' \
+  "$BUILD/dex/classes.dex" || die "MainActivity missing from dex"
 
 # ------------------------------------------------- 4) merge dex into base apk
 log "packaging ..."
