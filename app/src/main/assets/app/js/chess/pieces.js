@@ -15,14 +15,17 @@ const BASE =
   'h-17.6 a2.1,2.1 0 0 0 -2.1,2.1 v0.9 a1.6,1.6 0 0 0 1.6,1.6 z';
 const COLLAR = 'M15.9,30.9 h13.2 a1,1 0 0 1 1,1 v1.1 h-15.2 v-1.1 a1,1 0 0 1 1,-1 z';
 
-const SHAPES = {
+export const SHAPES = {
   p: {
     body: [
-      'M17.5,31.2 c0,-4.5 2.5,-6.3 2.5,-9.8 h5 c0,3.5 2.5,5.3 2.5,9.8 z',
+      // single continuous silhouette: the ball head is merged into the neck
+      // (a separate head circle floated detached from the body on device).
+      'M18.6,31.2 C19.4,26.5 20.0,22.8 20.6,19.6 A5.5,5.5 0 1 1 24.4,19.6 ' +
+        'C25.0,22.8 25.6,26.5 26.4,31.2 Z',
       COLLAR,
       BASE,
     ],
-    dots: [{ cx: 22.5, cy: 13.2, r: 5.7 }],
+    dots: [],
   },
   r: {
     body: [
@@ -81,11 +84,7 @@ const SHAPES = {
       COLLAR,
       BASE,
     ],
-    dots: [
-      { cx: 11.9, cy: 14.6, r: 2.3 },
-      { cx: 33.1, cy: 14.6, r: 2.3 },
-      { cx: 22.5, cy: 6.6, r: 0 },
-    ],
+    dots: [],   // no detached side blobs — the dome + cross read as a king alone
   },
 };
 
@@ -100,7 +99,8 @@ export const PIECE_NAMES = { p: 'Pawn', r: 'Rook', n: 'Knight', b: 'Bishop', q: 
  * @param {'classic'|'outline'|'solid'} theme
  */
 export function pieceSvg(type, color, theme = 'classic') {
-  const shape = SHAPES[type] || SHAPES.p;
+  const resolved = SHAPES[type] ? type : 'p';
+  const shape = SHAPES[resolved];
   const white = color === 'w';
 
   const palette =
@@ -117,7 +117,7 @@ export function pieceSvg(type, color, theme = 'classic') {
   const svg = svgEl('svg', {
     viewBox: '0 0 45 45',
     role: 'img',
-    'aria-label': `${white ? 'White' : 'Black'} ${PIECE_NAMES[type]}`,
+    'aria-label': `${white ? 'White' : 'Black'} ${PIECE_NAMES[resolved]}`,
   });
 
   const g = svgEl('g', {

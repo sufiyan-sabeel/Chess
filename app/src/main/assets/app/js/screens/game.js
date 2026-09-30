@@ -10,7 +10,8 @@
 import { el, clear, formatClockPrecise } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { Board } from '../ui/board.js';
-import { confirm, modal, toast, section } from '../ui/components.js';
+import { confirm, modal, toast, section, avatarNode } from '../ui/components.js';
+import { pieceSvg } from '../chess/pieces.js';
 import { GameSession, resumeSession, presetById } from '../chess/game.js';
 import { getSettings, updateSettings, getSession, playSound, haptic } from '../store.js';
 import { getGame } from '../db.js';
@@ -99,6 +100,16 @@ export function gameScreen(ctx = {}) {
   });
 
   // ------------------------------------------------------------- player UI
+  // Chess.com-style cards: avatar, name, real captured-piece glyphs and the
+  // *net* material lead (shown only on the side that is ahead).
+  const VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+  function materialOf(moves, color) {
+    return moves
+      .filter((m) => m.color === color && m.captured)
+      .reduce((sum, m) => sum + (VALUES[m.captured] || 0), 0);
+  }
+
   function playerName(color, cfg) {
     const session0 = getSession();
     const human = session0 && session0.display_name ? session0.display_name : 'You';
@@ -109,6 +120,7 @@ export function gameScreen(ctx = {}) {
   }
 
   function playerCard(color, state) {
+    const foe = color === 'w' ? 'b' : 'w';
     const isTop = (board.orientation === 'w' && color === 'b') || (board.orientation === 'b' && color === 'w');
     const clockMs = state.clock ? (color === 'w' ? state.clock.w : state.clock.b) : 0;
     const active = state.clock && state.clock.active === color;
@@ -122,18 +134,24 @@ export function gameScreen(ctx = {}) {
     ].filter(Boolean).join(' ');
 
     const captures = state.moves.filter((m) => m.color === color && m.captured);
-    const material = captures.reduce((sum, m) => sum + (VALUES[m.captured] || 0), 0);
+    // Net lead: my captured material minus what the opponent captured off me.
+    const ahead = materialOf(state.moves, color) - materialOf(state.moves, foe);
+    const pieceTheme = (getSettings() && getSettings().pieceTheme) || 'classic';
+    const displayName = state.names[color] || (color === 'w' ? 'White' : 'Black');
 
     return el('div', { class: `player ${active ? 'player--active' : ''}`.trim() },
       el('div', { class: `player__color player__color--${color}`, 'aria-hidden': 'true' }),
+      avatarNode(displayName, `${state.id || 'game'}-${color}`, 'sm'),
       el('div', { class: 'player__meta' },
         el('div', { class: 'player__name' },
-          el('span', { text: state.names[color] }),
+          el('span', { text: displayName }),
           color === state.turn ? el('span', { class: 'tiny', style: { color: 'var(--accent-green)' }, text: '●' }) : null,
         ),
         el('div', { class: 'player__captures' },
-          captures.length ? captures.map((m) => icon(PIECE_ICON[m.captured], 13)) : el('span', { class: 'tiny', text: state.mode === 'bot' ? (state.level || 'medium') : state.control.label }),
-          material > 0 ? el('span', { class: 'player__diff', text: `+${material}` }) : null,
+          captures.length
+            ? captures.map((m) => pieceSvg(m.captured, foe, pieceTheme))
+            : el('span', { class: 'tiny', text: state.mode === 'bot' ? (state.level || 'medium') : state.control.label }),
+          ahead > 0 ? el('span', { class: 'player__diff', text: `+${ahead}` }) : null,
         ),
       ),
       state.unlimited
@@ -141,9 +159,6 @@ export function gameScreen(ctx = {}) {
         : el('div', { class: cls, text: formatClockPrecise(clockMs), 'data-clock': color }),
     );
   }
-
-  const VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-  const PIECE_ICON = { p: 'minus', n: 'target', b: 'shield', r: 'board', q: 'crown', k: 'crown' };
 
   // ------------------------------------------------------------- move list
   function renderMoves(state) {
