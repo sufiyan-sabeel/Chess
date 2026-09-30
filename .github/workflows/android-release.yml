@@ -202,12 +202,21 @@ jobs:
       - name: Build debug APK (test build without release shrinking)
         run: tools/build-apk.sh debug
 
+      - name: Verify debug APK (16 checks — this is the file sideloaded for testing)
+        run: |
+          APK="dist/checkmate-${VERSION_NAME}-debug.apk"
+          test -s "$APK"
+          ./tools/verify-apk.sh "$APK"
+
       - name: Report size and SHA-256
         run: |
           (cd dist && sha256sum ./*.apk > SHA256SUMS.txt)
           echo "## Checkmate ${VERSION_NAME} (versionCode ${VERSION_CODE})" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat dist/BUILD_INFO.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/BUILD_INFO-debug.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat dist/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
@@ -223,6 +232,7 @@ jobs:
             dist/*.sha256
             dist/SHA256SUMS.txt
             dist/BUILD_INFO.txt
+            dist/BUILD_INFO-debug.txt
           if-no-files-found: error
 
       - name: Upload build logs
@@ -281,4 +291,5 @@ jobs:
             checkmate-apk/*.sha256
             checkmate-apk/SHA256SUMS.txt
             checkmate-apk/BUILD_INFO.txt
+            checkmate-apk/BUILD_INFO-debug.txt
           fail_on_unmatched_files: true

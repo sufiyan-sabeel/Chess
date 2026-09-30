@@ -180,6 +180,12 @@ log "APK: $DIST/$OUT_NAME"
 log "size: $SIZE_BYTES bytes ($(awk "BEGIN{printf \"%.2f\", $SIZE_BYTES/1048576}") MiB)"
 log "sha256: $SHA"
 
+# Per-mode build info: the debug build must not overwrite the release file —
+# CI run 36652736095 shipped a BUILD_INFO.txt describing the DEBUG apk
+# (mode: debug, 773492 bytes) next to the release APK. Release metadata
+# always lives in BUILD_INFO.txt; debug metadata in BUILD_INFO-debug.txt.
+INFO_NAME="BUILD_INFO.txt"
+[ "$MODE" = "debug" ] && INFO_NAME="BUILD_INFO-debug.txt"
 {
   echo "app: Checkmate"
   echo "version_name: $VERSION_NAME"
@@ -191,6 +197,6 @@ log "sha256: $SHA"
   echo "built_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "host: $(uname -sr) / $(uname -m)"
   echo "package: com.umaiz.checkmate"
-} > "$DIST/BUILD_INFO.txt"
+} > "$DIST/$INFO_NAME"
 
 log "done."
