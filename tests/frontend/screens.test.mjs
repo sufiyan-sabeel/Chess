@@ -79,7 +79,7 @@ test('the four rebuilt screens expose their contracted exports', async () => {
   }
   // data exports are arrays, not functions
   const settings = await importJs('screens/settings.js');
-  assert.ok(Array.isArray(settings.BOARD_THEMES) && settings.BOARD_THEMES.length === 5, 'BOARD_THEMES is an array of five');
+  assert.ok(Array.isArray(settings.BOARD_THEMES) && settings.BOARD_THEMES.length === 6, 'BOARD_THEMES lists six themes');
   assert.ok(Array.isArray(settings.PIECE_THEMES) && settings.PIECE_THEMES.length === 3, 'PIECE_THEMES is an array of three');
 });
 
@@ -88,7 +88,7 @@ test('the four rebuilt screens expose their contracted exports', async () => {
 test('board swatches match css/tokens.css exactly', async () => {
   const { BOARD_THEMES } = await importJs('screens/settings.js');
   const css = readFileSync(`${JS_ROOT}../css/tokens.css`, 'utf8');
-  assert.equal(BOARD_THEMES.length, 5, 'five board themes');
+  assert.equal(BOARD_THEMES.length, 6, 'six board themes (incl. slate)');
   const ids = new Set();
   for (const t of BOARD_THEMES) {
     assert.ok(!ids.has(t.id), `duplicate theme id ${t.id}`);

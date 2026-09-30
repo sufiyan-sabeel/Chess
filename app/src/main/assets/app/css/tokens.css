@@ -66,6 +66,7 @@
 [data-board-theme="walnut"] { --board-light: #f0d9b5; --board-dark: #b58863; }
 [data-board-theme="midnight"] { --board-light: #c8d0e0; --board-dark: #4a5570; }
 [data-board-theme="tournament"] { --board-light: #ffffdd; --board-dark: #86a666; }
+[data-board-theme="slate"] { --board-light: #cbd5e0; --board-dark: #718096; }
 
 /* ------------------------------------------------------------------ reset */
 *, *::before, *::after { box-sizing: border-box; }

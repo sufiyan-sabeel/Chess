@@ -30,6 +30,9 @@ export const BOARD_THEMES = [
   { id: 'walnut', label: 'Walnut', light: '#f0d9b5', dark: '#b58863' },
   { id: 'midnight', label: 'Midnight', light: '#c8d0e0', dark: '#4a5570' },
   { id: 'tournament', label: 'Tournament', light: '#ffffdd', dark: '#86a666' },
+  // Slate mirrors the grey board of the author's earlier web chess project
+  // (light #cbd5e0 / dark #718096) — same feel, original implementation.
+  { id: 'slate', label: 'Slate', light: '#cbd5e0', dark: '#718096' },
 ];
 
 /** Must match pieces.js theme ids (asserted by tests). */
