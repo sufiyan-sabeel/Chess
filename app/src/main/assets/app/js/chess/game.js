@@ -34,13 +34,15 @@ export const PRESETS = [
   { id: 'blitz-3', label: 'Blitz', name: '3 + 0', initialSec: 180, incrementSec: 0, kind: 'blitz' },
   { id: 'blitz-3-2', label: 'Blitz', name: '3 + 2', initialSec: 180, incrementSec: 2, kind: 'blitz' },
   { id: 'blitz-5', label: 'Blitz', name: '5 + 0', initialSec: 300, incrementSec: 0, kind: 'blitz' },
+  { id: 'blitz-5-3', label: 'Blitz', name: '5 + 3', initialSec: 300, incrementSec: 3, kind: 'blitz' },
   { id: 'rapid-10', label: 'Rapid', name: '10 + 0', initialSec: 600, incrementSec: 0, kind: 'rapid' },
+  { id: 'rapid-10-5', label: 'Rapid', name: '10 + 5', initialSec: 600, incrementSec: 5, kind: 'rapid' },
   { id: 'rapid-15-10', label: 'Rapid', name: '15 + 10', initialSec: 900, incrementSec: 10, kind: 'rapid' },
   { id: 'classical-30', label: 'Classical', name: '30 + 0', initialSec: 1800, incrementSec: 0, kind: 'classical' },
 ];
 
 export function presetById(id) {
-  return PRESETS.find((p) => p.id === id) || PRESETS[5];
+  return PRESETS.find((p) => p.id === id) || PRESETS[0];
 }
 
 /** Custom (unlimited allowed) time control from the mode screen. */
@@ -128,6 +130,7 @@ export class GameSession {
     this.lastMove = null;         // { from, to }
     this.pendingPromotion = null; // { from, to } awaiting piece choice
     this.drawOffer = null;        // side that offered a draw
+    this.drawClaimable = null; // 'threefold'|'fiftyMove' — claimable, never automatic
     this.saves = 0;
 
     const unlimited = !control.initialSec;
@@ -197,6 +200,7 @@ export class GameSession {
       lastMove: this.lastMove,
       pendingPromotion: this.pendingPromotion,
       drawOffer: this.drawOffer,
+      drawClaimable: this.drawClaimable,
       names: this.names,
       clock: this.clock ? this.clock.snapshot() : null,
       unlimited: this.unlimited,
@@ -309,6 +313,8 @@ export class GameSession {
     // check / mate tones (chess.js already applied the move)
     if (this.chess.inCheck()) playSound(this.chess.isCheckmate() ? 'end' : 'check');
 
+    // A new move clears a stale claim; checkOutcome re-arms it when deserved.
+    this.drawClaimable = null;
     this.checkOutcome();
     this.persist();
     this.emit({ moved: move });
@@ -337,10 +343,13 @@ export class GameSession {
     } else if (this.chess.isInsufficientMaterial()) {
       reason = 'insufficient';
     } else if (this.chess.isThreefoldRepetition()) {
-      reason = 'threefold';
+      // Claimable by either player — the game continues until claimed.
+      this.drawClaimable = 'threefold';
+      return this.outcome;
     } else if (this.chess.isDraw()) {
-      // 50-move (any other draw chess.js recognises)
-      reason = 'fiftyMove';
+      // 50-move (any other draw chess.js recognises) — also a claim, not auto.
+      this.drawClaimable = 'fiftyMove';
+      return this.outcome;
     }
 
     if (reason) this.finish(winner, reason);
@@ -382,6 +391,22 @@ export class GameSession {
     return this.finish(null, 'agreement');
   }
 
+  /**
+   * Claim a claimable draw (threefold repetition / fifty-move rule).
+   * Unlike checkmate or stalemate these never end the game by themselves —
+   * either player must claim. Online delegates to the server verdict.
+   */
+  claimDraw(by = null) {
+    if (this.finished) return this.outcome;
+    if (this.mode === 'online' && this.transport && this.transport.claimDraw) {
+      try { this.transport.claimDraw(by || this.chess.turn()); } catch { /* offline */ }
+      return this.outcome;
+    }
+    if (!this.drawClaimable) return null;
+    const reason = this.drawClaimable;
+    return this.finish(null, reason, { claimedBy: by || this.chess.turn() });
+  }
+
   abort() {
     if (this.finished) return null;
     return this.finish(null, 'abort');
@@ -390,6 +415,7 @@ export class GameSession {
   finish(winner, reason, extra = {}) {
     if (this.finished) return this.outcome;
     this.finished = true;
+    this.drawClaimable = null;
     if (this.clock) this.clock.stop();
 
     const token = winner === 'w' ? RESULTS.white : winner === 'b' ? RESULTS.black : RESULTS.draw;
@@ -440,6 +466,8 @@ export class GameSession {
     if (this.clock && this.clockStarted) this.clock.switchTo(this.chess.turn());
 
     playSound('tap');
+    this.drawClaimable = null;
+    this.checkOutcome();
     this.persist();
     this.emit({ undone: true });
     this.maybeBotMove();
@@ -545,6 +573,7 @@ export class GameSession {
       white: this.names.w,
       black: this.names.b,
       humanSide: this.humanSide,
+      drawClaimable: this.drawClaimable,
       clocks: this.clock ? this.clock.snapshot() : null,
       startedAt: this.createdAt,
       finishedAt: final ? Date.now() : null,
@@ -599,6 +628,9 @@ export function resumeSession(record, onUpdate) {
   });
   session.createdAt = record.startedAt || Date.now();
   session.startFen = record.startFen || session.startFen;
+  // Resuming from the live position loses the repetition history, so a
+  // pending claim right travels with the record instead of being recomputed.
+  if (record.drawClaimable) session.drawClaimable = record.drawClaimable;
   if (record.clocks && session.clock) {
     session.clock.syncTo({
       w: record.clocks.w,

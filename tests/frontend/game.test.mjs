@@ -223,3 +223,75 @@ test('onUpdate receives state patches on every mutation', () => {
   assert.ok(events.some((e) => e.moved && e.moved.san === 'e4'));
   g.dispose();
 });
+
+test('spec presets include blitz 5+3 and rapid 10+5', () => {
+  const b53 = presetById('blitz-5-3');
+  assert.equal(b53.initialSec, 300);
+  assert.equal(b53.incrementSec, 3);
+  const r105 = presetById('rapid-10-5');
+  assert.equal(r105.initialSec, 600);
+  assert.equal(r105.incrementSec, 5);
+  // every spec time control is present exactly once
+  for (const [id, sec, inc] of [
+    ['bullet-1', 60, 0], ['bullet-2', 120, 1],
+    ['blitz-3', 180, 0], ['blitz-3-2', 180, 2], ['blitz-5', 300, 0], ['blitz-5-3', 300, 3],
+    ['rapid-10', 600, 0], ['rapid-10-5', 600, 5], ['rapid-15-10', 900, 10],
+    ['classical-30', 1800, 0],
+  ]) {
+    const p = presetById(id);
+    assert.equal(p.initialSec, sec, `${id} initial`);
+    assert.equal(p.incrementSec, inc, `${id} increment`);
+  }
+});
+
+test('threefold repetition is claimable, never automatic', () => {
+  const g = localGame();
+  // Nf3/Nf6/Ngrestores the start position twice: the 3rd occurrence claims.
+  const line = [
+    ['g1', 'f3'], ['g8', 'f6'], ['f3', 'g1'], ['f6', 'g8'],
+    ['g1', 'f3'], ['g8', 'f6'], ['f3', 'g1'], ['f6', 'g8'],
+  ];
+  for (const [from, to] of line) {
+    const r = g.attemptMove({ from, to });
+    assert.equal(r.ok, true, `${from}${to} legal`);
+  }
+  const s = g.state();
+  // game continues — the draw must be claimed, not imposed
+  assert.equal(s.gameOver, false);
+  assert.equal(s.drawClaimable, 'threefold');
+  // moves are still accepted while the claim is pending
+  assert.equal(g.attemptMove({ from: 'e2', to: 'e4' }).ok, true);
+  // leaving the repetition clears a stale claim (e4 broke it)
+  assert.equal(g.state().drawClaimable, null);
+  g.dispose();
+
+  const g2 = localGame();
+  for (const [from, to] of line) g2.attemptMove({ from, to });
+  const out = g2.claimDraw('w');
+  assert.ok(out, 'claim accepted');
+  assert.equal(g2.state().gameOver, true);
+  assert.equal(out.winner, null);
+  assert.equal(out.reason, 'threefold');
+  assert.equal(out.token, '1/2-1/2');
+  // no moves after the claimed draw
+  assert.equal(g2.attemptMove({ from: 'e2', to: 'e4' }).ok, false);
+  g2.dispose();
+});
+
+test('fifty-move rule is claimable, never automatic', () => {
+  const g = localGame({ fen: 'r6k/8/8/8/8/8/R7/K7 w - - 100 1' });
+  const r = g.attemptMove({ from: 'a2', to: 'a3' });
+  assert.equal(r.ok, true);
+  const s = g.state();
+  assert.equal(s.gameOver, false);
+  assert.equal(s.drawClaimable, 'fiftyMove');
+  // claiming without a pending right is rejected
+  const g2 = localGame();
+  assert.equal(g2.claimDraw('w'), null);
+  g2.dispose();
+  const out = g.claimDraw('w');
+  assert.ok(out, 'claim accepted');
+  assert.equal(out.reason, 'fiftyMove');
+  assert.equal(g.state().gameOver, true);
+  g.dispose();
+});

@@ -13,7 +13,7 @@
 import { el, clear } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar, toast, modal, section, emptyState } from '../ui/components.js';
-import { PRESETS, customControl } from '../chess/game.js';
+import { PRESETS, customControl, presetById } from '../chess/game.js';
 import { LEVELS } from '../chess/bot.js';
 import { getSettings, updateSettings, getSession, isLoggedIn } from '../store.js';
 import { apiConfigured } from '../api.js';
@@ -126,7 +126,7 @@ export function playScreen() {
 
   function currentControl() {
     if (customActive) return customActive;
-    return PRESETS.find((p) => p.id === selectedPreset) || PRESETS[5];
+    return PRESETS.find((p) => p.id === selectedPreset) || presetById('blitz-5');
   }
 
   let customActive = null;

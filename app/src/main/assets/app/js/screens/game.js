@@ -215,6 +215,16 @@ export function gameScreen(ctx = {}) {
 
     controls.append(flipBtn, soundBtn);
 
+    if (state.drawClaimable && !state.gameOver && state.mode !== 'online') {
+      controls.appendChild(el('button', {
+        class: 'btn btn--secondary',
+        type: 'button',
+        onClick: () => { session.claimDraw(state.turn); },
+      }, icon('handshake', 18), el('span', {
+        text: state.drawClaimable === 'threefold' ? 'Claim draw · repetition' : 'Claim draw · 50 moves',
+      })));
+    }
+
     if (state.gameOver) {
       controls.appendChild(el('button', {
         class: 'btn btn--primary',
@@ -274,6 +284,13 @@ export function gameScreen(ctx = {}) {
       statusLine.textContent = `${state.outcome.reasonLabel} · ${state.outcome.token}`;
       return;
     }
+    if (!state.gameOver && state.drawClaimable) {
+      statusLine.classList.add('game-status--sync');
+      statusLine.textContent = state.drawClaimable === 'threefold'
+        ? 'Threefold repetition — either side may claim the draw'
+        : 'Fifty moves without progress — either side may claim the draw';
+      return;
+    }
     if (state.botThinking) {
       statusLine.classList.add('game-status--sync');
       statusLine.textContent = 'Opponent is thinking…';
@@ -314,6 +331,19 @@ export function gameScreen(ctx = {}) {
           class: 'btn btn--ghost', type: 'button', text: 'Close',
           onClick: () => h.close(),
         }),
+        ...(state.mode === 'online' ? [] : [el('button', {
+          class: 'btn btn--secondary', type: 'button', text: 'Rematch',
+          onClick: () => {
+            h.close();
+            setPendingGame({
+              mode: state.mode,
+              control: state.control,
+              side: state.humanSide || 'w',
+              level: state.level || 'medium',
+            });
+            go('/game');
+          },
+        })]),
         el('button', {
           class: 'btn btn--primary', type: 'button', text: 'Review game',
           onClick: () => { h.close(); go(`/review/${encodeURIComponent(state.id)}`); },
